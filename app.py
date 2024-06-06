@@ -41,7 +41,6 @@ input_card = dbc.Card(
             style={'display': 'left'}),width=2),
         dbc.Col(dcc.DatePickerSingle(id='date-input', placeholder='Select Date', display_format='YYYY-MM-DD', min_date_allowed='2020-01-01', #Date
                                     date=None, max_date_allowed=datetime.today().strftime('%Y-%m-%d'),
-                                    initial_visible_month=datetime.today().strftime('%Y-%m-%d'),
                                     first_day_of_week=1,clearable=True, disabled=False, style={'border': '3px solid #ccc'},
                                     className='datepicker'), width=6),
         
@@ -59,7 +58,7 @@ graph_card = dbc.Card(
             dbc.Col(dcc.Graph(id="income-expense-graph"), width=12)
         ]),
         dbc.Row([
-            dbc.Col(dcc.Graph(id='expense-distribution-pie'), width=12),
+            dbc.Col(dcc.Graph(id='expense-distribution-pie'), width=6),
             dbc.Col(dcc.Graph(id='income-expense-trend'), width=6)
         ])
     ])
@@ -88,7 +87,7 @@ app.layout = dbc.Container([
 
 
 @app.callback(
-        Output('date-input', 'initial_visible_month'),
+        Output('date-input', 'month'),
         Input('year-dropdown', 'value')
 )
 def update_year_selector(selected_year):
@@ -110,11 +109,9 @@ def update_year_selector(selected_year):
 )
 def update_graphs(add_clicks, remove_clicks, date, income, expenses):
     '''function to update the graphs'''
-
-
     global df
     ctx = dash.callback_context
-    
+
     df['Date'] = pd.to_datetime(df['Date'])
     df = df.sort_values('Date')
 
@@ -129,7 +126,7 @@ def update_graphs(add_clicks, remove_clicks, date, income, expenses):
         }}
         expense_distribution_fig = {
             'data': [
-                {'values': df['Expenses'], 'labels': df['Date'], 'type': 'pie', 'name': 'Expenses'}
+                {'values': df['Expenses'], 'labels': df['Date'].dt.strftime('%Y-%m-%d'), 'type': 'pie', 'name': 'Expenses'}
             ],
             'layout': {
                 'title': 'Expense Distribution'
@@ -166,7 +163,7 @@ def update_graphs(add_clicks, remove_clicks, date, income, expenses):
                         }
                     }, {
                         'data': [
-                            {'values': df['Expenses'], 'labels': df['Date'], 'type': 'pie', 'name': 'Expenses'}
+                            {'values': df['Expenses'], 'labels': df['Date'].dt.strftime('%Y-%m-%d'), 'type': 'pie', 'name': 'Expenses'}
                         ],
                         'layout': {
                             'title': 'Expense Distribution'
@@ -184,11 +181,14 @@ def update_graphs(add_clicks, remove_clicks, date, income, expenses):
             new_data = {'Date': [date], 'Income': [income], 'Expenses': [expenses]}
             new_df = pd.DataFrame(new_data)
             df = pd.concat([df, new_df], ignore_index=True)
+            df['Date'] = pd.to_datetime(df['Date'])
             df.sort_values('Date', inplace=True)
             df.to_csv(csv_path, index=False)
     elif button_id == 'remove-button' and not df.empty:
-        df = df[:-1]
-        df.to_csv(csv_path, index=False)
+        if date:
+            date_to_remove = pd.to_datetime(date)
+            df= df[df['Date'] != date_to_remove]
+            df.to_csv(csv_path, index=False)
     income_expense_fig = {
         'data': [
             {'x': df['Date'], 'y': df['Income'], 'type': 'bar', 'name': 'Income'},
@@ -200,7 +200,7 @@ def update_graphs(add_clicks, remove_clicks, date, income, expenses):
     }
     expense_distribution_fig = {
             'data': [
-                {'values': df['Expenses'], 'labels': df['Date'], 'type': 'pie', 'name': 'Expenses'}
+                {'values': df['Expenses'], 'labels': df['Date'].dt.strftime('%Y-%m-%d'), 'type': 'pie', 'name': 'Expenses'}
             ],
             'layout': {
                 'title': 'Expense Distribution'
