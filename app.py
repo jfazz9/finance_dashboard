@@ -29,7 +29,7 @@ years = [{'label':str(year), 'value': str(year)} for year in range(2020,datetime
 navbar = dbc.NavbarSimple(
     brand="Personal Finance Dashboard",
     brand_href="#",
-    color="primary",
+    color="black",
     dark=True
 )
 
@@ -59,7 +59,8 @@ graph_card = dbc.Card(
             dbc.Col(dcc.Graph(id="income-expense-graph"), width=12)
         ]),
         dbc.Row([
-            dbc.Col(dcc.Graph(id='expense-distribution-pie'), width=12)
+            dbc.Col(dcc.Graph(id='expense-distribution-pie'), width=12),
+            dbc.Col(dcc.Graph(id='income-expense-trend'), width=6)
         ])
     ])
 )
@@ -99,16 +100,23 @@ def update_year_selector(selected_year):
 # Callback to update the graph
 @app.callback(
     [Output('income-expense-graph', 'figure'),
-    Output('expense-distribution-pie', 'figure')],
+    Output('expense-distribution-pie', 'figure'),
+    Output('income-expense-trend', 'figure')],
     [Input('submit-button', 'n_clicks'),
      Input('remove-button', 'n_clicks')],
     [State('date-input', 'date'),
      State('income-input', 'value'),
      State('expenses-input', 'value')]
 )
-def update_graph(add_clicks, remove_clicks, date, income, expenses):
+def update_graphs(add_clicks, remove_clicks, date, income, expenses):
+    '''function to update the graphs'''
+
+
     global df
     ctx = dash.callback_context
+    
+    df['Date'] = pd.to_datetime(df['Date'])
+    df = df.sort_values('Date')
 
     if not ctx.triggered:
         income_expense_fig = {
@@ -127,7 +135,16 @@ def update_graph(add_clicks, remove_clicks, date, income, expenses):
                 'title': 'Expense Distribution'
             }
         }
-        return income_expense_fig, expense_distribution_fig
+        income_expense_trend_fig = {
+            'data': [
+                {'x': df['Date'], 'y': df['Income'], 'type': 'scatter', 'name':'Income'},
+                {'x': df['Date'], 'y': df['Expenses'], 'type': 'scatter', 'name': 'Expenses'}
+            ],
+            'layout': {
+                'title': 'Income and Expenses Over Time'
+            }
+        }
+        return income_expense_fig, expense_distribution_fig, income_expense_trend_fig
     
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
     if button_id == 'submit-button':
@@ -137,13 +154,37 @@ def update_graph(add_clicks, remove_clicks, date, income, expenses):
                 income = float(income)
                 expenses = float(expenses)
                 if income < 0 or expenses < 0:
-                    return{'data': [], 'layout': {'title': 'Monthly Income Vs Expenses'}}
-            except (ValueError, TypeError) as e:
-                return {'data': [], 'layout': {'title': 'Monthly Income vs Expenses'}}, {'data': [], 'layout': {'title': 'Expense Distribution'}}
+                    raise ValueError("Income must be greater than zero")
+            except (ValueError, TypeError):
+                return {
+                        'data': [
+                            {'x': df['Date'], 'y': df['Income'], 'type': 'bar', 'name': 'Income'},
+                            {'x': df['Date'], 'y': df['Expenses'], 'type': 'bar', 'name': 'Expenses'}
+                        ],
+                        'layout': {
+                            'title': 'Monthly Income vs Expenses'
+                        }
+                    }, {
+                        'data': [
+                            {'values': df['Expenses'], 'labels': df['Date'], 'type': 'pie', 'name': 'Expenses'}
+                        ],
+                        'layout': {
+                            'title': 'Expense Distribution'
+                        }
+                    }, {
+                        'data': [
+                            {'x': df['Date'], 'y': df['Income'], 'type': 'line', 'name': 'Income'},
+                            {'x': df['Date'], 'y': df['Expenses'], 'type': 'line', 'name': 'Expenses'}
+                        ],
+                        'layout': {
+                            'title': 'Income and Expenses Over Time'
+                        }
+                    }
             
             new_data = {'Date': [date], 'Income': [income], 'Expenses': [expenses]}
             new_df = pd.DataFrame(new_data)
             df = pd.concat([df, new_df], ignore_index=True)
+            df.sort_values('Date', inplace=True)
             df.to_csv(csv_path, index=False)
     elif button_id == 'remove-button' and not df.empty:
         df = df[:-1]
@@ -165,8 +206,16 @@ def update_graph(add_clicks, remove_clicks, date, income, expenses):
                 'title': 'Expense Distribution'
             }
         }
-    return income_expense_fig, expense_distribution_fig
-
+    income_expense_trend_fig = {
+                'data': [
+                    {'x': df['Date'], 'y': df['Income'], 'type': 'line', 'name': 'Income'},
+                    {'x': df['Date'], 'y': df['Expenses'], 'type': 'line', 'name': 'Expenses'}
+                ],
+                'layout': {
+                    'title': 'Income and Expenses Over Time'
+                }
+            }
+    return income_expense_fig, expense_distribution_fig, income_expense_trend_fig
 
 @app.callback(
     Output('summary-text', 'children'),
